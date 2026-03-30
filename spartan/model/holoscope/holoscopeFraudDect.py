@@ -514,13 +514,13 @@ class HoloScopeOpt:
         'edgepropertyAnalysis has already digitized the ratings'
         rbins = lambda x: int(x) #lambda x: 0 if x<2.5 else 1 if x<=3.5 else 2
         if self.matricizetenor is None:
-            matricize_start = time.clock()
+            matricize_start = time.perf_counter()
             sm, rindexcol = self.tenormatricization(self.tspim, self.ratepim,
                     tbindic, rbins, mtype=coo_matrix,
                     dropweight=self.priordropslop,
                     logdegree=False)
             self.matricizetenor = sm
-            print('::::matricize time cost: ', time.clock() - matricize_start)
+            print('::::matricize time cost: ', time.perf_counter() - matricize_start)
         sm = self.matricizetenor
         print("matricize {}x{} and svd dense... ..."\
                 .format(sm.shape[0], sm.shape[1]))
@@ -816,7 +816,7 @@ def holoscope_interface(wmat, alg, ptype, qfun, b, rateprop=None, tsprop=None,
     opt.nlocalbests=[] #mainly used for fastgreedy
     gsrows,gbscores,gbestvx = 0,0,0
     for k in range(nblock):
-        start_time = time.clock()
+        start_time = time.perf_counter()
         if alg == 'greedy':
             n1, n2 = sm.shape
             if n1 + n2 > 1e4:
@@ -831,7 +831,7 @@ def holoscope_interface(wmat, alg, ptype, qfun, b, rateprop=None, tsprop=None,
             print("""alg: {}\n\t+ # of singlular vectors: {}\n""".format(alg, numSing))
             print('initial start')
             opt.initfastgreedy( ptype, numSing, eps=eps )
-            print("::::Finish Init @ ", time.clock() - start_time)
+            print("::::Finish Init @ ", time.perf_counter() - start_time)
             print('fast greedy algorithm ...')
             opt.fastgreedy()
             opt.nlocalbests.append(opt.fastlocalbest)
@@ -839,7 +839,7 @@ def holoscope_interface(wmat, alg, ptype, qfun, b, rateprop=None, tsprop=None,
             print('No such algorithm: '+alg)
             sys.exit(1)
 
-        print("::::Finish Algorithm @ ", time.clock() - start_time)
+        print("::::Finish Algorithm @ ", time.perf_counter() - start_time)
 
         srows = opt.bestA.nonzero()[0]
         bscores = np.multiply(opt.bestfbs, opt.bestbsusps)

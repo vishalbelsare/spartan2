@@ -3,6 +3,7 @@
 # which returns ((rowSet, colSet), score) for the most suspicious block.
 
 from __future__ import division
+import copy
 import json
 import time
 import math
@@ -243,6 +244,15 @@ def fastGreedyDecreasing(M, colWeights, maxsize=-1):
             finalColSet.remove(deleted[i][1])
     return (finalRowSet, finalColSet, bestAveScore)
 
+
+def c2score(mat, row_set, col_set):
+    """Sum of edge weights within the induced subgraph defined by row_set x col_set."""
+    row_idx = sorted(list(row_set))
+    col_idx = sorted(list(col_set))
+    submat = mat[np.ix_(row_idx, col_idx)]
+    return submat.sum()
+
+
 def fast_greedy_decreasing_monosym(mat):
     # return the subgraph with optimal (weighted) degree density using Charikai's greedy algorithm
     (m, n) = mat.shape
@@ -260,7 +270,7 @@ def fast_greedy_decreasing_monosym(mat):
 
     # *decrease* in total weight when *removing* this row / column
     delta = np.squeeze(1.0*mat.sum(axis=1).A)
-    tree = PriorQueMin(delta)
+    tree = MinTree(delta)
     #print("finished building min trees")
 
     n_dels = 0

@@ -118,3 +118,6 @@ temp
 outputData
 output
 
+# Model output files
+*.cols
+*.rows

@@ -27,17 +27,16 @@ class CubeFlowPlus(DMmodel):
         
         self.initData()
         
-        if self.res is None:    
+        if self.res is None:
             self.res = self.call_cubeflow()
 
-        # 步骤一：划分大图为连通子图
+        # Step 1: partition CubeFlow results into weakly connected components
         subgraph_connected_list, subgraph_timebin_list, subgraph_timebin_idx_list, subgraph_can_divided = \
             divide_connected_conponents(self.res, self.amt_tensor, self.cmt_tensor)
 
-        # 步骤二：对每个大图（总节点数超过最大限制）进行单独处理
-        # 选择1：去掉度最大的节点，放入连通图算法
-        # 选择2：运行带约束的CubeFlow，直至跑空所有节点为止
-
+        # Step 2: recursively handle oversized components (total M-nodes > max_node_limit)
+        # Strategy 1: remove the highest-degree M-node and rerun connected-components
+        # Strategy 2: run size-constrained CubeFlow until all nodes are consumed
         subgraph_connected_list, subgraph_timebin_list, subgraph_timebin_idx_list = \
             handle_big_graph(subgraph_connected_list, subgraph_timebin_list, subgraph_timebin_idx_list,
                              subgraph_can_divided, self.max_node_limit,
@@ -45,14 +44,13 @@ class CubeFlowPlus(DMmodel):
 
         print(len(subgraph_connected_list))
 
-        # 步骤三：对连通子图列表打分并排序
-
+        # Step 3: score and rank all connected components
         subgraph_score_list, subgraph_score1_list, subgraph_score2_list, amct_list = \
             score_connected_graph_list(subgraph_connected_list, subgraph_timebin_list, subgraph_timebin_idx_list,
                                        self.alpha, self.amt_stensor, self.cmt_stensor, self.amt_tensor, self.cmt_tensor)
 
         subgraph_score_list = np.array(subgraph_score_list)
-        subgraph_score_sort_index_list = np.argsort(subgraph_score_list)[::-1]  # 分数由高到低排序
+        subgraph_score_sort_index_list = np.argsort(subgraph_score_list)[::-1]  # sort scores descending
         res_new = []
 
         for idx in subgraph_score_sort_index_list:

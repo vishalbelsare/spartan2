@@ -27,7 +27,7 @@ from spartan.tensor.graph import Graph
 
 class EagleMine( DMmodel ):
     ''' Micro-cluster detection: vision-guided anomaly detection.
-    Given a histogram derived from the correlated features of graph nodes，
+    Given a histogram derived from the correlated features of graph nodes,
     EagleMine can be used to identify the micro-clusters in the graph,
     these nodes in micro-clusters basically corresponds to some anomaly patterns.
     '''

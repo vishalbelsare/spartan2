@@ -204,8 +204,8 @@ class DenseIntMapper(_Mapper):
     def map(self, attrs):
         rets = [None] * len(attrs)
         for i, attr in enumerate(attrs):
-            if not (attr in self.int2id):
-                self.id2int[attr] = len(self.int2id)
+            if not (attr in self.id2int):
+                self.id2int[attr] = len(self.id2int)
                 self.int2id[len(self.int2id)] = attr
 
             rets[i] = self.id2int[attr]
@@ -214,4 +214,9 @@ class DenseIntMapper(_Mapper):
 
     def revert(self, indices):
         return [ self.int2id[i] for i in indices ]
+
+    @property
+    def _idx(self):
+        """Number of unique mapped IDs (for backwards compatibility with tutorials)."""
+        return len(self.id2int)
 

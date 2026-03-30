@@ -35,6 +35,9 @@ REQUIRED_PACKAGES = [
     'scikit-image',
     'sparse',
     'ipdb',
+    'joblib',
+    'datasketch',
+    'tqdm',
 ]
 
 setuptools.setup(name=NAME,
@@ -53,6 +56,6 @@ setuptools.setup(name=NAME,
                      "License :: OSI Approved :: MIT License",
                      "Operating System :: OS Independent",
                  ],
-                 python_requires='>=3.6',
+                 python_requires='>=3.7',
                  build_ext= build_ext
                  )

@@ -1,11 +1,6 @@
-import sys
-sys.path.append('../')
-from gendenseblock import *
-from mytools.ioutil import saveSimpleListData
 import numpy as np
 import scipy.sparse.linalg as slin
 from scipy.sparse import csr_matrix
-from gendenseblock import *
 from os.path import expanduser
 import math
 home = expanduser("~")

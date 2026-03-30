@@ -1,4 +1,5 @@
-from biosppy.signals import ecg
+import numpy as np
+from scipy.signal import butter, filtfilt, find_peaks
 
 from .._model import DMmodel
 from . import param_default, DTensor
@@ -9,6 +10,26 @@ param_default_dict = {
     'right_size': 136,
     'out_path': None
 }
+
+
+def _pan_tompkins_rpeaks(signal, sampling_rate):
+    """Detect R-peaks using a simplified Pan-Tompkins algorithm via scipy."""
+    # Bandpass filter 5-15 Hz to isolate QRS complex
+    nyq = 0.5 * sampling_rate
+    b, a = butter(4, [5 / nyq, 15 / nyq], btype='band')
+    filtered = filtfilt(b, a, signal)
+
+    # Differentiate, square, and apply moving average
+    diff = np.diff(filtered)
+    squared = diff ** 2
+    win = int(0.15 * sampling_rate)
+    kernel = np.ones(win) / win
+    integrated = np.convolve(squared, kernel, mode='same')
+
+    # Find peaks with minimum distance of ~200 ms
+    min_dist = int(0.2 * sampling_rate)
+    r_peaks, _ = find_peaks(integrated, distance=min_dist, height=np.mean(integrated))
+    return r_peaks
 
 
 class RPeak(DMmodel):
@@ -22,17 +43,19 @@ class RPeak(DMmodel):
         self.segments = None
 
     def _find_rpeaks(self):
-        sig_out = ecg.ecg(signal=self.series_data[0], sampling_rate=self.sampling_rate, show=False)
-        r_peaks = sig_out["rpeaks"]
+        # Extract raw 1D numpy signal from DTensor (shape: channels x samples)
+        raw = self.series_data._data
+        signal = np.asarray(raw[0], dtype=float)
+        r_peaks = _pan_tompkins_rpeaks(signal, self.sampling_rate)
+
         segments = []
         for r_peak in r_peaks:
-            if r_peak-self.left_size >= 0 and r_peak + self.right_size < self.length:
-                ts = self.series_data[:, r_peak-self.left_size:r_peak + self.right_size]
+            if r_peak - self.left_size >= 0 and r_peak + self.right_size < self.length:
+                ts = self.series_data._data[:, r_peak - self.left_size:r_peak + self.right_size]
                 segments.append(ts)
-        import numpy as np
         self.segments = DTensor.from_numpy(np.array(segments))
         if self.out_path is not None:
-            np.save(self.out_path, segments)
+            np.save(self.out_path, np.array(segments))
         return self.segments
 
     def run(self):

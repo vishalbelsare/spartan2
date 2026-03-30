@@ -197,7 +197,7 @@ class CubeFlow(DMmodel):
             self.m_mtSize_dict = copy.deepcopy(self.m_mtSize_dict_ori)
             self.m_set = set(list(self.m_mt_dict.keys()))
         
-        curAveScore = float('-inf') # 看一下是否更改把numDeleted的初始值
+        curAveScore = float('-inf') # check whether to reset numDeleted initial value
         
         if self.has_limit:
             if self.checkset_size_max_limit():
@@ -312,7 +312,7 @@ class CubeFlow(DMmodel):
         print('size of found subgraph:  ', len(finalsets[0]), len(finalsets[1]), len(finalsets[2]))
         
         if sum(self.bestNumDeleted.values()) == 0:  
-            # 没有找到任何子图满足限制条件，返回原始子图。例如，限制了m的大小，算法把a集合删空了之后m大小依然大于限制。
+            # No sub-block meets the size constraints (e.g. all A-nodes removed but M still exceeds limit); return empty sets.
             print('Do not find any sub-block that meets the settings.')
             for i in range(len(finalsets)):
                 finalsets[i] = copy.deepcopy(self.sets_ori[i])

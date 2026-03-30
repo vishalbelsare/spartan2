@@ -21,7 +21,7 @@ def preprocess_data(stensorList:list, dim):
     mt_t_dict = {}
     mt_d4_dict = {}  # k_symbols
     m_mt_dict = {} 
-    m_mtSize_dict = {} # key: m; value: 对应mt的个数 # for limit size
+    m_mtSize_dict = {} # key: m-node id; value: number of mt-pairs (used for size limiting)
     
     amt_stensor = stensorList[0]
     cmt_stensor = stensorList[1]

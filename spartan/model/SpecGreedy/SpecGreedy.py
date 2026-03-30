@@ -6,6 +6,7 @@ import gc
 import numpy as np
 import scipy.sparse.linalg as linalg
 import scipy.sparse
+import scipy.sparse as sps
 
 # project
 from spartan.model.fraudar.greedy import logWeightedAveDegree, sqrtWeightedAveDegree, aveDegree, fast_greedy_decreasing_monosym
@@ -138,11 +139,11 @@ class SpecGreedy(DMmodel):
                     opt_k, opt_density = kth, avgsc_part
                     sm_pms = max(len(row_cans), len(col_cans))
                     cans = row_cans
-                    fin_pms = len(nds_res)
+                    fin_pms = len(row_ids)
                     print("Update. svd init shape (candidates size): {}".format((sm_pms, sm_pms)))
                     print("Update. size: {}, score: {}\n".format((fin_pms, fin_pms), avgsc_part))
                     nd_idx = dict(zip(range(sm_pms), sorted(cans)))
-                    orgnds = [nd_idx[id] for id in nds_res]
+                    orgnds = [nd_idx[id] for id in row_ids]
 
                 if 2.0*opt_density >= S[kth]:  # kth < topk and
                     print("Early Stopped. k_cur: {},  optimal density: {}, lambda_k: {}".format(kth, opt_density, S[kth]))

@@ -11,16 +11,11 @@ import timeit
 from ...tensor import TensorData
 from .. import CubeFlow
 
-# Remember to add spartan to you PATH
-# import sys
-# sys.path.append("/<dir to spartan2>/spartan2")
-# sys.path.append("./spartan2-FCC")
-# import spartan as st
 
 def divide_connected_conponents(res, amt_tensor, cmt_tensor):
     subgraph_connected_list = []
-    subgraph_timebin_list = []  # 用于查询子张量的timebin
-    subgraph_timebin_idx_list = []  # 存放每个子张量时间维度在subgraph_timebin_list的下标
+    subgraph_timebin_list = []  # stores timebin list for querying sub-tensors
+    subgraph_timebin_idx_list = []  # index of each sub-tensor's timebin in subgraph_timebin_list
     subgraph_can_divided = []
     # find all suspicious edges
     for top_i in range(len(res)):
@@ -39,19 +34,19 @@ def divide_connected_conponents(res, amt_tensor, cmt_tensor):
         susp_cmt_df['c'] = susp_cmt_df['c'].apply(lambda x: 'c' + str(x))
         susp_cmt_df['m'] = susp_cmt_df['m'].apply(lambda x: 'm' + str(x))
 
-        # 构造有向图（多条边）
+        # build weighted directed multigraph from suspicious transactions
         G = nx.MultiDiGraph()
         G.add_weighted_edges_from(susp_amt_df[['a', 'm', 'money']].values)
         G.add_weighted_edges_from(susp_cmt_df[['m', 'c', 'money']].values)
 
-        # 获得连通子图
+        # extract weakly connected components
         subgraph_connected_list_topi = [G.subgraph(c).copy() for c in nx.weakly_connected_components(G)]
         subgraph_connected_list.extend(subgraph_connected_list_topi)
         subgraph_timebin_idx_list.extend([top_i] * len(subgraph_connected_list_topi))
 
-        # 维护判断是否可拆解list
+        # track whether each component can be further subdivided (0 = indivisible)
         if res[top_i][1] == float("-inf") and len(subgraph_connected_list_topi) == 1:
-            subgraph_can_divided.append(0) # 不可拆分
+            subgraph_can_divided.append(0) # indivisible: score is -inf and only one component
 
         else:
             subgraph_can_divided.extend([1] * len(subgraph_connected_list_topi))
@@ -60,14 +55,12 @@ def divide_connected_conponents(res, amt_tensor, cmt_tensor):
     return subgraph_connected_list, subgraph_timebin_list, subgraph_timebin_idx_list, subgraph_can_divided
 
 def divide_amc_dict(node_list):
-    '''
-    用于将str账号混合列表处理回int形式，并划分为A、M、C
-    '''
+    '''Convert mixed string account list to int form and split into A (senders), M (intermediaries), C (receivers).'''
     a_list = []
     m_list = []
     c_list = []
     for acc in node_list:
-        acc_int = int(re.sub('[a-zA-Z]', "", acc)) # 转换为int型
+        acc_int = int(re.sub('[a-zA-Z]', "", acc)) # strip prefix letter and convert to int
         if acc.startswith('a'):
             a_list.append(acc_int)
         elif acc.startswith('m'):
@@ -79,9 +72,7 @@ def divide_amc_dict(node_list):
     return a_list, m_list, c_list
 
 def get_csv_from_subgraph(node_list, amt_tensor, cmt_tensor, subgraph_timebin_list, timebin_idx):
-    '''
-    从字符串账号列表中获得适用于算法输入的csv数据
-    '''
+    '''Extract DataFrame rows matching this subgraph's nodes and time bins for CubeFlow input.'''
     a_list, m_list, c_list = divide_amc_dict(node_list)
     time_bins =  subgraph_timebin_list[timebin_idx]
     am_subgraph_df = amt_tensor.data[(amt_tensor.data[0].isin(a_list)) & (amt_tensor.data[1].isin(m_list)) & (amt_tensor.data[2].isin(time_bins))]
@@ -89,9 +80,7 @@ def get_csv_from_subgraph(node_list, amt_tensor, cmt_tensor, subgraph_timebin_li
     return am_subgraph_df, cm_subgraph_df
 
 def relabel_acct(am_df, cm_df):
-    '''
-    对账号和timebin进行重新编号，加快算法运行速度
-    '''
+    '''Re-index accounts and timebins starting from 0 to speed up algorithm execution.'''
     temp_left = am_df.copy()
     temp_right = cm_df.copy()
     temp_left.columns = ['a_acct', 'm_acct', 'time_bin', 'amount']
@@ -108,16 +97,16 @@ def relabel_acct(am_df, cm_df):
     print('middle acct len: ', len(middle_acc_list))
     print('timebin count:', len(timebin_list))
 
-    left_acc_list = temp_left['a_acct'].drop_duplicates().sort_values().reset_index(drop=True)  # 构建字典
+    left_acc_list = temp_left['a_acct'].drop_duplicates().sort_values().reset_index(drop=True)  # unique sender accounts
     right_acc_list = temp_right['c_acct'].drop_duplicates().sort_values().reset_index(drop=True)
 
     # map accounts from 0
     left_acc_dict = dict(zip(list(left_acc_list), list(left_acc_list.index.astype(int))))
     middle_acc_dict = dict(zip(list(middle_acc_list), list(middle_acc_list.index.astype(int))))
-    right_acc_dict = dict(zip(list(right_acc_list), list(right_acc_list.index.astype(int))))  # 构建字典完成
+    right_acc_dict = dict(zip(list(right_acc_list), list(right_acc_list.index.astype(int))))  # build mapping dict
     timebin_dict = dict(zip(list(timebin_list), list(timebin_list.index.astype(int))))
 
-    temp_left['a_acct'] = temp_left['a_acct'].apply(lambda x: left_acc_dict[x])  # 对原有属性进行映射
+    temp_left['a_acct'] = temp_left['a_acct'].apply(lambda x: left_acc_dict[x])  # remap to integer indices
     temp_left['m_acct'] = temp_left['m_acct'].apply(lambda x: middle_acc_dict[x])
     temp_left['time_bin'] = temp_left['time_bin'].apply(lambda x: timebin_dict[x])
     temp_right['m_acct'] = temp_right['m_acct'].apply(lambda x: middle_acc_dict[x])
@@ -127,7 +116,7 @@ def relabel_acct(am_df, cm_df):
     # map 0 to original account
     left_acc_dict2 = dict(zip(list(left_acc_list.index.astype(int)), list(left_acc_list)))
     middle_acc_dict2 = dict(zip(list(middle_acc_list.index.astype(int)), list(middle_acc_list)))
-    right_acc_dict2 = dict(zip(list(right_acc_list.index.astype(int)), list(right_acc_list)))  # 构建字典完成
+    right_acc_dict2 = dict(zip(list(right_acc_list.index.astype(int)), list(right_acc_list)))  # reverse map: index -> original id
     timebin_dict2 = dict(zip(list(timebin_list.index.astype(int)), list(timebin_list)))
 
     temp_left.columns = temp_right.columns = [0, 1, 2, 3]
@@ -164,7 +153,7 @@ def call_cubeflow(am_df, cm_df, maxsize, outpath='', alpha=0.8, k=-1, dim=3, del
     return res
 
 def cal_score_from_graph(subgraph, alpha):
-    # 连通子图的am+cm矩阵
+    # AM+CM edge-weight matrix for the connected subgraph
     subG_weight_list = list(subgraph.edges(data='weight', default=1))
     subG_weight_df = pd.DataFrame(subG_weight_list)
     print(subG_weight_df)
@@ -183,14 +172,13 @@ def cal_score_from_graph(subgraph, alpha):
     subG_info['indegree'].fillna(0, inplace=True)
     subG_info['outdegree'].fillna(0, inplace=True)
 
-    #     # 连通子图中m层节点
+    #     # M-layer nodes in connected subgraph
     #     m_layer_nodes = pd.concat([subG_in_Df[1], subG_out_Df[0]]).drop_duplicates(keep='first', inplace=False)
     #     print('m_layer_nodes len:', len(m_layer_nodes))
     #     m_node_num.append(len(m_layer_nodes))
 
-    # 计算得分
-    subG_info_array = subG_info.to_numpy()
-    subG_info['f'], subG_info['q'] = np.min(subG_info_array, axis=1), np.max(subG_info_array, axis=1)
+    # compute score: f = min(in,out), r = max-min for each m-node
+    subG_info_array = subG_info.to_numpy()    subG_info['f'], subG_info['q'] = np.min(subG_info_array, axis=1), np.max(subG_info_array, axis=1)
     subG_info['r'] = subG_info['q'] - subG_info['f']
     print(subG_info)
 
@@ -203,14 +191,7 @@ def cal_score_from_graph(subgraph, alpha):
     return curScore
 
 def revert_acct(amct_list, dict_dir):
-    '''
-    用于将a、m、c账户映射回原始字符串编号
-    :param a_list: 需要映射的a账户list
-    :param m_list: ...
-    :param c_list: ...
-    :param dict_dir: 存放映射关系文件的目录
-    :return:
-    '''
+    '''Map detected integer account IDs back to original string identifiers using saved dictionaries.'''
     a_list = amct_list[0]
     m_list = amct_list[1]
     c_list = amct_list[2]
@@ -236,7 +217,7 @@ def revert_acct(amct_list, dict_dir):
 
 def cal_score_from_acc(amct_list, alpha, amt_tensor, cmt_tensor):
     a_list, m_list, c_list, t_list = amct_list[0], amct_list[1], amct_list[2], amct_list[3]
-    # 连通子图的am+cm矩阵
+    # filter rows of AM and CM tensors that belong to this subgraph
     subG_in_Df = amt_tensor.data[amt_tensor.data[0].isin(a_list) & amt_tensor.data[1].isin(m_list) & amt_tensor.data[2].isin(t_list)]
     subG_out_Df = cmt_tensor.data[cmt_tensor.data[0].isin(c_list) & cmt_tensor.data[1].isin(m_list) & cmt_tensor.data[2].isin(t_list)]
     subG_indegree = subG_in_Df[[1, 2, 3]].groupby([1, 2]).sum()
@@ -251,9 +232,8 @@ def cal_score_from_acc(amct_list, alpha, amt_tensor, cmt_tensor):
 
     print(subG_info)
 
-    # 计算得分
-    subG_info_array = subG_info.to_numpy()
-    subG_info['f'], subG_info['q'] = np.min(subG_info_array, axis=1), np.max(subG_info_array, axis=1)
+    # compute score: f = min(in,out), r = max-min for each m-node
+    subG_info_array = subG_info.to_numpy()    subG_info['f'], subG_info['q'] = np.min(subG_info_array, axis=1), np.max(subG_info_array, axis=1)
     subG_info['r'] = subG_info['q'] - subG_info['f']
     print(subG_info)
 
@@ -362,9 +342,9 @@ def loadtxt2res(outpath, dim, data_type=int):
 
 def handle_big_graph(subgraph_connected_list, subgraph_timebin_list, subgraph_timebin_idx_list, subgraph_can_divided, max_node_limit,
                      amt_tensor, cmt_tensor, handle_biggraph_type, maxsize2, alpha, dim, del_type):
-    # 步骤二：对每个大图（总节点数超过最大限制）进行单独处理
-    # 选择1：去掉度最大的节点，放入连通图算法
-    # 选择2：运行带约束的CubeFlow，直至跑空所有节点为止
+    # Step 2: handle each component whose M-node count exceeds max_node_limit
+    # Strategy 1: remove the highest-degree M-node, rerun connected-components
+    # Strategy 2: run constrained CubeFlow until all nodes are consumed
     curr_i = 0
     while curr_i < len(subgraph_connected_list):
         curr_subgraph = subgraph_connected_list[curr_i]
@@ -374,7 +354,7 @@ def handle_big_graph(subgraph_connected_list, subgraph_timebin_list, subgraph_ti
 
             if handle_biggraph_type == 1:
                 m_str_list_tmp = ['m' + str(m) for m in m_list_tmp]
-                curr_degree_dict = dict(curr_subgraph.degree(m_str_list_tmp))  # 去掉m账户中度最大的节点
+                curr_degree_dict = dict(curr_subgraph.degree(m_str_list_tmp))  # remove highest-degree M-node
 
                 max_degree_node = max(curr_degree_dict, key=curr_degree_dict.get)
                 curr_matrix = nx.to_scipy_sparse_matrix(curr_subgraph, curr_nodes_list)
@@ -382,7 +362,7 @@ def handle_big_graph(subgraph_connected_list, subgraph_timebin_list, subgraph_ti
                 node_idx = curr_nodes_list.index(max_degree_node)
 
                 zero_matrix = get_zero_matrix(node_idx, curr_matrix.shape[0])
-                curr_matrix = zero_matrix * curr_matrix * zero_matrix  # 删除结点
+                curr_matrix = zero_matrix * curr_matrix * zero_matrix  # delete node by zeroing its row and column
                 curr_subgraph = nx.from_scipy_sparse_matrix(curr_matrix,
                                                             create_using=nx.MultiDiGraph)
 
@@ -394,7 +374,7 @@ def handle_big_graph(subgraph_connected_list, subgraph_timebin_list, subgraph_ti
                 curr_subgraph.remove_node(max_degree_node)
                 print(f'max degree node [{max_degree_node}] has been removed!')
 
-                # 重新运行连通子图算法
+                # re-run connected-components on the trimmed subgraph
                 curr_subgraph_connected_list = [curr_subgraph.subgraph(c).copy() for c in
                                                 nx.weakly_connected_components(curr_subgraph)]
                 print('add subgraph num:', len(curr_subgraph_connected_list))
@@ -409,21 +389,21 @@ def handle_big_graph(subgraph_connected_list, subgraph_timebin_list, subgraph_ti
                     curr_i += 1
                     continue
 
-                # 准备算法输入数据
+                # prepare CubeFlow input data for this subgraph
                 am_df, cm_df = get_csv_from_subgraph(curr_nodes_list, amt_tensor, cmt_tensor, subgraph_timebin_list,
                                                      subgraph_timebin_idx_list[curr_i])
 
-                # 调用CubeFlow算法
+                # run size-constrained CubeFlow on this component
                 curr_res = call_cubeflow(am_df, cm_df, maxsize=maxsize2, outpath='', alpha=alpha, k=-1, dim=dim,
                                          del_type=del_type, is_find_all_blocks=True)
                 print('find subgraph num:', len(curr_res))
 
-                # 复用拆分连通子图代码
+                # reuse connected-components splitting on new CubeFlow results
                 curr_subgraph_connected_list, curr_subgraph_timebin_list, curr_subgraph_timebin_idx_list, curr_subgraph_can_divided \
                     = divide_connected_conponents(curr_res, amt_tensor, cmt_tensor)
                 print('add subgraph num:', len(curr_subgraph_connected_list))
 
-                # 加入现有的连通子图list中
+                # merge new components into the main list
                 subgraph_connected_list.extend(curr_subgraph_connected_list)
                 old_timebin_list_len = len(subgraph_timebin_list)
                 curr_subgraph_timebin_idx_list = list(
@@ -487,7 +467,7 @@ def score_connected_graph_list(subgraph_connected_list, subgraph_timebin_list, s
     # csr_matrix_list, timebin2idx_dict = prepare_for_sparse_score(subgraph_timebin_list, amt_stensor, cmt_stensor,
     #                                                              amt_tensor, cmt_tensor)
 
-    # 算法函数使用fs目标函数，即不包含t时使用
+    # use fs objective (marginalizes over t dimension)
     a_mt_mat = amt_stensor.sum(axis=2)._data.tocsr()
     c_mt_mat = cmt_stensor.sum(axis=2)._data.tocsr()
 

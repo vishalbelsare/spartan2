@@ -11,3 +11,4 @@ ipdb
 Cython
 joblib==0.17.0
 datasketch==1.5.1
+tqdm

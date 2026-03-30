@@ -61,6 +61,12 @@ class Graph:
 
         cootensor = self.graph_tensor
 
+        # Accept sets or other iterables; convert to numpy array for indexing
+        if not hasattr(rows, '__len__') or not hasattr(rows, '__getitem__'):
+            rows = np.array(list(rows), dtype=int)
+        if not hasattr(cols, '__len__') or not hasattr(cols, '__getitem__'):
+            cols = np.array(list(cols), dtype=int)
+
         gr = -1 * st.ones(cootensor.shape[0], dtype=int)
         gc = -1 * st.ones(cootensor.shape[1], dtype=int)
 
